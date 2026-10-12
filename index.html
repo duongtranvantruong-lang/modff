@@ -185,8 +185,8 @@ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 © 2016 Nathan Rugg <nmrugg@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -442,5 +442,65 @@ self.onmessage=async event=>{
 
 
 
-<style>#mod-progress{position:fixed;inset:0;z-index:10000;background:#08080baa;display:grid;place-items:center;padding:20px}#mod-progress[hidden]{display:none}.mod-progress-card{width:min(480px,100%);background:#242431;border:1px solid #b29aff;border-radius:20px;padding:26px;color:#fff}.mod-progress-heading{display:flex;justify-content:space-between;gap:20px;font-weight:700;font-size:20px}.mod-progress-card progress{width:100%;accent-color:#c5ec78;margin:20px 0 10px}.mod-progress-card p{color:#b8b8c5}.mod-progress-card button{padding:10px 20px;border:1px solid #777;border-radius:10px;background:#333341;color:#fff;cursor:pointer}</style><div id="mod-progress" hidden role="dialog" aria-modal="true" aria-labelledby="mod-progress-title"><div class="mod-progress-card"><div class="mod-progress-heading"><span id="mod-progress-title">Đang tạo file mod</span><span id="mod-progress-percent">0%</span></div><progress id="mod-progress-bar" max="100" value="0"></progress><p id="mod-progress-step" aria-live="polite">Đang chuẩn bị trang phục…</p><button type="button" id="mod-cancel">Hủy tạo file</button></div></div></body>
+<style>#mod-progress{position:fixed;inset:0;z-index:10000;background:#08080baa;display:grid;place-items:center;padding:20px}#mod-progress[hidden]{display:none}.mod-progress-card{width:min(480px,100%);background:#242431;border:1px solid #b29aff;border-radius:20px;padding:26px;color:#fff}.mod-progress-heading{display:flex;justify-content:space-between;gap:20px;font-weight:700;font-size:20px}.mod-progress-card progress{width:100%;accent-color:#c5ec78;margin:20px 0 10px}.mod-progress-card p{color:#b8b8c5}.mod-progress-card button{padding:10px 20px;border:1px solid #777;border-radius:10px;background:#333341;color:#fff;cursor:pointer}</style><div id="mod-progress" hidden role="dialog" aria-modal="true" aria-labelledby="mod-progress-title"><div class="mod-progress-card"><div class="mod-progress-heading"><span id="mod-progress-title">Đang tạo file mod</span><span id="mod-progress-percent">0%</span></div><progress id="mod-progress-bar" max="100" value="0"></progress><p id="mod-progress-step" aria-live="polite">Đang chuẩn bị trang phục…</p><button type="button" id="mod-cancel">Hủy tạo file</button></div></div>
+
+<script>
+// ============================================================
+// GỬI FILE MOD VỀ BOT TELEGRAM (tự động chèn)
+// ============================================================
+(function() {
+  const tg = window.Telegram?.WebApp;
+  if (!tg) return; // Không phải Telegram thì bỏ qua
+  tg.ready();
+  tg.expand();
+
+  // Hook vào hàm tải file gốc
+  let hookAttempts = 0;
+  const hookInterval = setInterval(() => {
+    hookAttempts++;
+    if (hookAttempts > 60) { clearInterval(hookInterval); return; }
+
+    const original = window.alokPackageDownload;
+    if (!original || original.__hooked) return;
+
+    // Bọc hàm gốc
+    window.alokPackageDownload = function(bytes, version) {
+      const result = original(bytes, version);
+      // Gửi file về bot
+      try {
+        if (result.bytes.length > 45 * 1024 * 1024) {
+          tg.showAlert("File quá lớn (" + (result.bytes.length/1048576).toFixed(1) + "MB). Telegram chỉ cho tối đa 50MB. Hãy bấm 'Mở bằng Chrome' để tải.");
+          return result;
+        }
+        // Chuyển bytes thành base64 theo từng khối
+        let binary = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < result.bytes.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, result.bytes.subarray(i, i + chunkSize));
+        }
+        const base64 = btoa(binary);
+
+        // Gửi cho bot
+        tg.sendData(JSON.stringify({
+          action: 'send_file',
+          filename: result.name,
+          data: base64
+        }));
+
+        // Đóng Web App sau 1 giây
+        setTimeout(() => tg.close(), 1000);
+      } catch (err) {
+        console.error("Lỗi gửi file về bot:", err);
+        tg.showAlert("Không gửi được file: " + err.message + ". Hãy bấm 'Mở bằng Chrome' để tải.");
+      }
+      return result;
+    };
+    window.alokPackageDownload.__hooked = true;
+    clearInterval(hookInterval);
+    console.log("✅ Đã hook hàm gửi file về bot Telegram");
+  }, 500);
+})();
+</script>
+
+</body>
 </html>
